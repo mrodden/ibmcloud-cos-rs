@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use clap::Parser;
@@ -19,13 +22,17 @@ use ibmcloud_iam::token::TokenManager;
 use tracing_subscriber;
 
 use ibmcloud_cos::cos;
+use ibmcloud_cos::multipartupload::{CompleteMultipartUpload, Part};
+
+const MB: usize = 1 * 1024 * 1024;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     endpoint: String,
     bucket: String,
-    prefix: Option<String>,
+    key: String,
+    filename: PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,13 +40,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    eprintln!("Listing {}", args.bucket);
-
     let tm = Arc::new(TokenManager::default());
+
     let c = cos::Client::new(tm, &args.endpoint);
 
-    for obj in c.list_objects(&args.bucket, args.prefix) {
-        println!("{} {:>10} {}", obj.last_modified, obj.size, obj.key);
+    let mut file = File::open(args.filename)?;
+    let mut parts: Vec<Part> = Vec::new();
+
+    let upload_id = c.create_multipart_upload(&args.bucket, &args.key)?;
+
+    loop {
+        let mut chunk = vec![0u8; 5 * MB];
+
+        let n = file.read(&mut chunk[..])?;
+
+        if n == 0 {
+            break;
+        }
+
+        chunk.truncate(n);
+
+        let seq_no = parts.len() + 1;
+
+        let part = c.upload_part(&args.bucket, &args.key, &upload_id, seq_no, chunk)?;
+        parts.push(part);
+    }
+
+    let cmu = CompleteMultipartUpload { parts };
+
+    if let Err(_) = c.complete_multipart_upload(&args.bucket, &args.key, &upload_id, cmu) {
+        let _ = c.abort_multipart_upload(&args.bucket, &args.key, &upload_id)?;
     }
 
     Ok(())

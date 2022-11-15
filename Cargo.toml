@@ -9,9 +9,10 @@ description = "A Rust client / SDK for interacting with IBM Cloud Object Storage
 keywords = ["ibmcloud", "cos"]
 
 [dependencies]
-reqwest = { version = "0.11", features = ["blocking"]}
-serde = { version = "1.0", features = ["derive"]}
-quick-xml = { version = "0.23", features = ["serialize"]}
+reqwest = { version = "0.11", features = ["blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+quick-xml = { version = "0.23", features = ["serialize"] }
 ibmcloud-iam = "0.2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+clap = { version = "4.0", features = ["derive"] }

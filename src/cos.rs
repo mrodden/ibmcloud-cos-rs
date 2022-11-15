@@ -17,13 +17,13 @@ use std::io::Read;
 use std::sync::Arc;
 
 use ibmcloud_iam::token::TokenManager;
-use quick_xml::{de::from_str, se::to_string};
+use quick_xml::de::from_str;
 use reqwest;
 use serde;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use tracing::error;
 
-type Error = Box<dyn std::error::Error>;
+pub type Error = Box<dyn std::error::Error>;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ListAllMyBucketsResult {
@@ -82,9 +82,9 @@ pub struct Contents {
 }
 
 pub struct Client {
-    tm: Arc<TokenManager>,
-    endpoint: String,
-    client: reqwest::blocking::Client,
+    pub(crate) tm: Arc<TokenManager>,
+    pub(crate) endpoint: String,
+    pub(crate) client: reqwest::blocking::Client,
 }
 
 impl Client {
@@ -146,7 +146,17 @@ impl Client {
             .send()?;
 
         let text: String = check_response(response)?.text()?;
-        let objlist: ListBucketResult = from_str(&text)?;
+        let objlist: ListBucketResult = match from_str(&text) {
+            Ok(v) => v,
+            Err(e) => {
+                let s = format!("{}", e);
+                if s.contains("missing field `Contents`") {
+                    return Err("No contents in bucket".into());
+                } else {
+                    return Err(Box::new(e));
+                }
+            }
+        };
 
         Ok(objlist)
     }
@@ -196,7 +206,7 @@ impl Client {
     }
 }
 
-fn check_response(
+pub(crate) fn check_response(
     response: reqwest::blocking::Response,
 ) -> Result<reqwest::blocking::Response, Error> {
     if !response.status().is_success() {
