@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tm = Arc::new(TokenManager::default());
     let c = cos::Client::new(tm, &args.endpoint);
 
-    for obj in c.list_objects(&args.bucket, args.prefix) {
+    for obj in c.list_objects(&args.bucket, args.prefix, None) {
         println!("{} {:>10} {}", obj.last_modified, obj.size, obj.key);
     }
 
