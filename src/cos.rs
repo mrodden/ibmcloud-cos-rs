@@ -115,14 +115,15 @@ impl Client {
         Ok(bucket_resp.buckets.list)
     }
 
-    pub fn list_objects(&self, bucket: &str, prefix: Option<String>) -> ObjectIterator {
-        ObjectIterator::new(self, bucket, prefix.clone())
+    pub fn list_objects(&self, bucket: &str, prefix: Option<String>, start_after: Option<String>) -> ObjectIterator {
+        ObjectIterator::new(self, bucket, prefix.clone(), start_after.clone())
     }
 
     fn _list_objects(
         &self,
         bucket: &str,
         prefix: &Option<String>,
+        start_after: &Option<String>,
         continuation_token: &Option<String>,
     ) -> Result<ListBucketResult, Error> {
         let c = &self.client;
@@ -135,6 +136,10 @@ impl Client {
 
         if let Some(pre) = prefix {
             url = format!("{}&prefix={}", url, pre);
+        }
+
+        if let Some(after) = start_after {
+            url = format!("{}&start-after={}", url, after);
         }
 
         let response = c
@@ -226,17 +231,19 @@ pub struct ObjectIterator<'a> {
     bucket: String,
     prefix: Option<String>,
     continuation_token: Option<String>,
+    start_after: Option<String>,
     results: VecDeque<Contents>,
     complete: bool,
 }
 
 impl<'a> ObjectIterator<'a> {
-    pub fn new(client: &'a Client, bucket: &str, prefix: Option<String>) -> Self {
+    pub fn new(client: &'a Client, bucket: &str, prefix: Option<String>, start_after: Option<String>) -> Self {
         Self {
             client,
             bucket: bucket.to_string(),
             prefix: prefix,
             continuation_token: None,
+            start_after: start_after,
             results: VecDeque::new(),
             complete: false,
         }
@@ -254,7 +261,7 @@ impl Iterator for ObjectIterator<'_> {
 
             match self
                 .client
-                ._list_objects(&self.bucket, &self.prefix, &self.continuation_token)
+                ._list_objects(&self.bucket, &self.prefix, &self.start_after, &self.continuation_token)
             {
                 Ok(mut v) => {
                     for o in v.contents.drain(..) {
