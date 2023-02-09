@@ -55,9 +55,13 @@ pub struct Bucket {
     pub creation_date: String,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+fn default_contents() -> Vec<Contents> {
+    Vec::new()
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct ListBucketResult {
-    #[serde(rename = "Contents")]
+    #[serde(rename = "Contents", default = "default_contents")]
     contents: Vec<Contents>,
     #[serde(rename = "$unflatten=KeyCount")]
     key_count: u64,
@@ -67,7 +71,7 @@ pub struct ListBucketResult {
     next_token: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Contents {
     #[serde(rename = "$unflatten=Key")]
     pub key: String,
@@ -156,18 +160,7 @@ impl Client {
             .send()?;
 
         let text: String = check_response(response)?.text()?;
-        let objlist: ListBucketResult = match from_str(&text) {
-            Ok(v) => v,
-            Err(e) => {
-                let s = format!("{}", e);
-                if s.contains("missing field `Contents`") {
-                    return Err("No contents in bucket".into());
-                } else {
-                    return Err(Box::new(e));
-                }
-            }
-        };
-
+        let objlist: ListBucketResult = from_str(&text)?;
         Ok(objlist)
     }
 
@@ -276,6 +269,12 @@ impl Iterator for ObjectIterator<'_> {
                 &self.start_after,
             ) {
                 Ok(mut v) => {
+                    if v.contents.len() < 1 {
+                        // empty bucket
+                        self.complete = true;
+                        return None;
+                    }
+
                     for o in v.contents.drain(..) {
                         self.results.push_back(o);
                     }
@@ -330,5 +329,15 @@ mod tests {
 
         let out = to_string(&res).unwrap();
         assert_eq!(out, exp);
+    }
+
+
+    #[test]
+    fn test_list_objects_empty_bucket() {
+        let input = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>logbase</Name><Prefix></Prefix><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated></ListBucketResult>"#;
+        let exp = ListBucketResult { contents: vec![], key_count: 0, max_keys: 1000, next_token: None };
+
+        let objs: ListBucketResult = from_str(&input).unwrap();
+        assert_eq!(objs, exp);
     }
 }
