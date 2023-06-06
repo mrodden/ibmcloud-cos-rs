@@ -207,6 +207,44 @@ impl Client {
         let r = check_response(response)?;
         Ok(Box::new(r))
     }
+
+    pub fn put_object<B: Into<reqwest::blocking::Body>>(
+        &self,
+        bucket: &str,
+        key: &str,
+        body: B,
+    ) -> Result<(), Error> {
+        let c = &self.client;
+        let url = format!("https://{}.{}/{}", bucket, self.endpoint, key);
+
+        let response = c
+            .put(url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.tm.token()?.access_token),
+            )
+            .body(body)
+            .send()?;
+
+        let _r = check_response(response)?;
+        Ok(())
+    }
+
+    pub fn delete_object(&self, bucket: &str, key: &str) -> Result<(), Error> {
+        let c = &self.client;
+        let url = format!("https://{}.{}/{}", bucket, self.endpoint, key);
+
+        let response = c
+            .delete(url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.tm.token()?.access_token),
+            )
+            .send()?;
+
+        check_response(response)?;
+        Ok(())
+    }
 }
 
 pub(crate) fn check_response(
@@ -331,11 +369,15 @@ mod tests {
         assert_eq!(out, exp);
     }
 
-
     #[test]
     fn test_list_objects_empty_bucket() {
         let input = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>logbase</Name><Prefix></Prefix><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><Delimiter></Delimiter><IsTruncated>false</IsTruncated></ListBucketResult>"#;
-        let exp = ListBucketResult { contents: vec![], key_count: 0, max_keys: 1000, next_token: None };
+        let exp = ListBucketResult {
+            contents: vec![],
+            key_count: 0,
+            max_keys: 1000,
+            next_token: None,
+        };
 
         let objs: ListBucketResult = from_str(&input).unwrap();
         assert_eq!(objs, exp);
