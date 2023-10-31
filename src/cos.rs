@@ -137,19 +137,13 @@ impl Client {
     ) -> Result<ListBucketResult, Error> {
         let c = &self.client;
 
-        let mut url = format!("https://{}.{}/?list-type=2", bucket, self.endpoint);
-
-        if let Some(tok) = continuation_token {
-            url = format!("{}&continuation-token={}", url, tok);
-        }
-
-        if let Some(pre) = prefix {
-            url = format!("{}&prefix={}", url, pre);
-        }
-
-        if let Some(after) = start_after {
-            url = format!("{}&start-after={}", url, after);
-        }
+        let url = build_list_objects_url(
+            &self.endpoint,
+            bucket,
+            prefix,
+            continuation_token,
+            start_after,
+        )?;
 
         let response = c
             .get(url)
@@ -333,6 +327,30 @@ impl Iterator for ObjectIterator<'_> {
     }
 }
 
+fn build_list_objects_url(
+    endpoint: &str,
+    bucket: &str,
+    prefix: &Option<String>,
+    continuation_token: &Option<String>,
+    start_after: &Option<String>,
+) -> Result<reqwest::Url, Error> {
+    let mut url = reqwest::Url::parse(&format!("https://{}.{}/?list-type=2", bucket, endpoint))?;
+
+    if let Some(tok) = continuation_token {
+        url.query_pairs_mut().append_pair("continuation-token", tok);
+    }
+
+    if let Some(pre) = prefix {
+        url.query_pairs_mut().append_pair("prefix", pre);
+    }
+
+    if let Some(after) = start_after {
+        url.query_pairs_mut().append_pair("start-after", after);
+    }
+
+    Ok(url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,5 +399,26 @@ mod tests {
 
         let objs: ListBucketResult = from_str(&input).unwrap();
         assert_eq!(objs, exp);
+    }
+
+    #[test]
+    fn test_build_list_objects_url() {
+        let res = build_list_objects_url(
+            "cos.cloud.ibm.com",
+            "test-bucket-123",
+            &None,
+            &None,
+            &Some("object-key/with/special=characters+001.stuff".to_string()),
+        );
+
+        let mut url = reqwest::Url::parse("https://test-bucket-123.cos.cloud.ibm.com/").unwrap();
+        url.query_pairs_mut()
+            .append_pair("list-type", "2")
+            .append_pair(
+                "start-after",
+                "object-key/with/special=characters+001.stuff",
+            );
+
+        assert_eq!(res.unwrap(), url);
     }
 }
