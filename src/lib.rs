@@ -13,4 +13,5 @@
 // limitations under the License.
 
 pub mod cos;
+pub mod hmac;
 pub mod multipartupload;
